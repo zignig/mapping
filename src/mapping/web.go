@@ -21,7 +21,7 @@ func NewWebServer() *WebHandler {
 	wh.router.GET("/:zoom/:x/:y", wh.GetTile)
 
 	var err error
-	wh.cache, err = lru.New(1000)
+	wh.cache, err = lru.New(20000)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -58,6 +58,7 @@ func (w *WebHandler) GetTile(c *gin.Context) {
 		}
 		w.cache.Add(path, data)
 		size = int64(len(data.([]byte)))
+		fmt.Println(path, " ", size)
 		c.Writer.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 		io.Copy(c.Writer, bytes.NewReader(data.([]byte)))
 		return
