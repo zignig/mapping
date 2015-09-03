@@ -6,13 +6,21 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hashicorp/golang-lru"
 	"io"
+	"math"
 	"strconv"
+)
+
+const (
+	tileDepth   = 8
+	maxDepth    = 18
+	defaultSize = 1000
 )
 
 type WebHandler struct {
 	router *gin.Engine
-	cache  *lru.Cache
 	store  *store
+	zoom   map[int]*lru.Cache
+	sizes  map[int]int
 }
 
 func NewWebServer() *WebHandler {
@@ -21,7 +29,29 @@ func NewWebServer() *WebHandler {
 	wh.router.GET("/:zoom/:x/:y", wh.GetTile)
 
 	var err error
-	wh.cache, err = lru.New(20000)
+	var t int
+	wh.zoom = make(map[int]*lru.Cache)
+	wh.sizes = make(map[int]int)
+	for t = 0; t <= tileDepth; t++ {
+		size := math.Pow(2, float64(t)*2.0)
+		fmt.Println(t, ":", size)
+		c, err := lru.New(int(size))
+		if err != nil {
+			return nil
+		}
+		wh.sizes[t] = int(size)
+		wh.zoom[t] = c
+	}
+	for t = tileDepth + 1; t <= maxDepth; t++ {
+		fmt.Println(t, ":", defaultSize)
+		c, err := lru.New(defaultSize)
+		if err != nil {
+			return nil
+		}
+		wh.sizes[t] = int(defaultSize)
+		wh.zoom[t] = c
+	}
+	fmt.Println(wh.sizes)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -40,15 +70,20 @@ func (w *WebHandler) Run() {
 func (w *WebHandler) GetTile(c *gin.Context) {
 	var size int64
 	zoom := c.Params.ByName("zoom")
+	zoomint, err := strconv.Atoi(zoom)
+	if err != nil {
+		fmt.Println("zoom fail ", err)
+		return
+	}
 	x := c.Params.ByName("x")
 	y := c.Params.ByName("y")
 	path := zoom + "/" + x + "/" + y
 	c.Writer.Header().Set("Content-Type", "image/png")
-	data, ok := w.cache.Get(path)
+	data, ok := w.zoom[zoomint].Get(path)
 	if !ok {
+		fmt.Println("no cache in", zoomint, "-", w.zoom[zoomint].Len(), " of ", w.sizes[zoomint])
 		data, err := w.store.Get(path)
 		if err != nil {
-			fmt.Println(err, " not in store")
 			data, err = FetchTile(path)
 			w.store.Put(path, data)
 			if err != nil {
@@ -56,14 +91,13 @@ func (w *WebHandler) GetTile(c *gin.Context) {
 				return
 			}
 		}
-		w.cache.Add(path, data)
+		w.zoom[zoomint].Add(path, data)
 		size = int64(len(data.([]byte)))
 		fmt.Println(path, " ", size)
 		c.Writer.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 		io.Copy(c.Writer, bytes.NewReader(data.([]byte)))
 		return
 	}
-	fmt.Println("serving ", path)
 	if data != nil {
 		size = int64(len(data.([]byte)))
 		c.Writer.Header().Set("Content-Length", strconv.FormatInt(size, 10))

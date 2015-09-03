@@ -12,7 +12,7 @@ const (
 
 func FetchTile(path string) (data interface{}, err error) {
 	url := "http://" + server + "/" + path
-	fmt.Println(url)
+	fmt.Println("fetching " + path + " as " + url)
 	resp, err := http.Get(url)
 	fmt.Println(resp.Status, err)
 	if err != nil {
