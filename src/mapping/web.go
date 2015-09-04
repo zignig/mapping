@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/hashicorp/golang-lru"
+	"html/template"
 	"io"
 	"math"
 	"strconv"
@@ -14,21 +15,38 @@ const (
 	tileDepth   = 8
 	maxDepth    = 18
 	defaultSize = 1000
+	port        = ":8099"
 )
 
 type WebHandler struct {
-	router *gin.Engine
-	store  *store
-	zoom   map[int]*lru.Cache
-	sizes  map[int]int
+	router    *gin.Engine
+	store     *store
+	zoom      map[int]*lru.Cache
+	sizes     map[int]int
+	templates *template.Template
 }
 
 func NewWebServer() *WebHandler {
 	wh := &WebHandler{}
-	wh.router = gin.New()
-	wh.router.GET("/:zoom/:x/:y", wh.GetTile)
+	wh.router = gin.Default()
+	wh.router.GET("/tiles/:zoom/:x/:y", wh.GetTile)
 
-	var err error
+	// templates
+	templ := template.New("")
+	data, err := Asset("asset/index.html")
+	if err != nil {
+		fmt.Println("Asset error ", err)
+	}
+	_, err = templ.New("index.html").Parse(string(data))
+	if err != nil {
+		fmt.Println("Template error ", err)
+	}
+	wh.templates = templ
+	wh.router.GET("/", wh.Index)
+
+	// static assets
+	wh.router.GET("/static/*path", wh.Static)
+	// build the caches
 	var t int
 	wh.zoom = make(map[int]*lru.Cache)
 	wh.sizes = make(map[int]int)
@@ -51,11 +69,12 @@ func NewWebServer() *WebHandler {
 		wh.sizes[t] = int(defaultSize)
 		wh.zoom[t] = c
 	}
-	fmt.Println(wh.sizes)
+
 	if err != nil {
 		fmt.Println(err)
 	}
 
+	// init the store
 	wh.store, err = NewStore("")
 	if err != nil {
 		fmt.Println(err)
@@ -64,7 +83,27 @@ func NewWebServer() *WebHandler {
 }
 
 func (w *WebHandler) Run() {
-	w.router.Run(":8099")
+	w.router.Run(port)
+}
+
+func (w *WebHandler) Static(c *gin.Context) {
+	path := c.Params.ByName("path")
+	fmt.Println(path)
+	data, err := Asset("asset/static" + path)
+	if err != nil {
+		fmt.Println("Asset Error ", err)
+	}
+	size := int64(len(data))
+	c.Writer.Header().Set("Content-Length", strconv.FormatInt(size, 10))
+	io.Copy(c.Writer, bytes.NewReader(data))
+}
+
+func (w *WebHandler) Index(c *gin.Context) {
+	data := gin.H{
+		"Maxdepth": maxDepth,
+	}
+	fmt.Println(data)
+	w.templates.ExecuteTemplate(c.Writer, "index.html", data)
 }
 
 func (w *WebHandler) GetTile(c *gin.Context) {
@@ -81,7 +120,7 @@ func (w *WebHandler) GetTile(c *gin.Context) {
 	c.Writer.Header().Set("Content-Type", "image/png")
 	data, ok := w.zoom[zoomint].Get(path)
 	if !ok {
-		fmt.Println("no cache in", zoomint, "-", w.zoom[zoomint].Len(), " of ", w.sizes[zoomint])
+		//fmt.Println("no cache in", zoomint, "-", w.zoom[zoomint].Len(), " of ", w.sizes[zoomint])
 		data, err := w.store.Get(path)
 		if err != nil {
 			data, err = FetchTile(path)
@@ -93,7 +132,7 @@ func (w *WebHandler) GetTile(c *gin.Context) {
 		}
 		w.zoom[zoomint].Add(path, data)
 		size = int64(len(data.([]byte)))
-		fmt.Println(path, " ", size)
+		//fmt.Println(path, " ", size)
 		c.Writer.Header().Set("Content-Length", strconv.FormatInt(size, 10))
 		io.Copy(c.Writer, bytes.NewReader(data.([]byte)))
 		return

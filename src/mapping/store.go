@@ -38,7 +38,7 @@ func (s *store) Close() {
 
 func (s *store) Get(path string) (v interface{}, err error) {
 	var data []byte
-	fmt.Println("store ", path)
+	//fmt.Println("store ", path)
 	err = s.db.View(func(tx *bolt.Tx) error {
 		data = tx.Bucket([]byte("tiles")).Get([]byte(path))
 		return nil
