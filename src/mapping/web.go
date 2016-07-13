@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	tileDepth   = 8
+	tileDepth   = 5
 	maxDepth    = 18
-	defaultSize = 1000
+	defaultSize = 1024
 	port        = ":8099"
 )
 

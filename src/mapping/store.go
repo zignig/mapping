@@ -15,7 +15,7 @@ type store struct {
 func NewStore(path string) (s *store, err error) {
 	s = &store{}
 	if path == "" {
-		path = "/tmp/tiles.db"
+		path = "./tiles.db"
 	}
 	db, err := bolt.Open(path, 0600, nil)
 	if err != nil {
