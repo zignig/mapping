@@ -192,14 +192,22 @@ func (ts *tileStore)fetchDb(path string) ([]byte, error) {
 }
 
 func (ts *tileStore)fetchTile(path string) (tile []byte, err error) {
+    client := http.Client{}
 	url := "http://" + server + "/" + path
 	ts.debugMessage("fetching " + path + " as " + url)
-	resp, err := http.Get(url)
-	ts.debugMessage(" -> Status %s", resp.Status)
+	//resp, err := http.Get(url)
+    req , err := http.NewRequest("GET",url,nil)
 	if err != nil {
-		ts.debugMessage("Error: %s", err)
+		ts.debugMessage("Req Error: %s", err)
 		return nil, err
 	} else {
+        req.Header.Set("User-Agent","github.com/zignig/mapping_caching")
+        resp , err := client.Do(req)
+	    ts.debugMessage(" -> Status %s", resp.Status)
+	    if err != nil {
+            ts.debugMessage("Resp Error: %s", err)
+    		return nil, err
+    	}
 		defer resp.Body.Close()
 		tile, err = ioutil.ReadAll(resp.Body)
 		if err != nil {
